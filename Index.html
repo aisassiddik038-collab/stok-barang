@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Sistem Stok Barang + Hapus/Edit</title>
+<style>
+body { font-family: Arial; margin: 20px; background: #f5f6fa; }
+h2,h3 { color:#2f3640; }
+form, table, .filter-section, .laporan, .login-box { background:white; padding:15px; border-radius:8px; box-shadow:0 2px 5px rgba(0,0,0,0.1); margin-bottom:20px; }
+input, select { padding:8px; margin:5px; border-radius:5px; border:1px solid #ccc; }
+button { padding:6px 10px; border:none; border-radius:5px; cursor:pointer; color:white; margin:2px; }
+button.add { background:#44bd32; }
+button.export { background:#273c75; }
+button.reset { background:#e84118; }
+button.login { background:#40739e; }
+button.logout { background:#e1b12c;color:black; }
+button.edit { background:#00a8ff; }
+button.hapus { background:#e84118; }
+table { width:100%; border-collapse: collapse; }
+th, td { border:1px solid #ddd; padding:8px; text-align:center; }
+th { background:#718093; color:white; }
+.search-box { margin-bottom:10px; }
+#adminStatus { font-weight:bold; color:#273c75; margin-bottom:10px; }
+</style>
+</head>
+<body>
+
+<h2>Sistem Stok Barang Otomatis</h2>
+
+<!-- LOGIN -->
+<div id="loginSection" class="login-box">
+<h3>Login Admin</h3>
+<input type="text" id="loginUser" placeholder="Username" />
+<input type="password" id="loginPass" placeholder="Password" />
+<button class="login" onclick="login()">Login</button>
+</div>
+
+<div id="appSection" style="display:none;">
+<p id="adminStatus"></p>
+<button class="logout" onclick="logout()">Logout</button>
+
+<!-- FORM INPUT -->
+<form id="formBarang">
+<input type="text" id="kode" placeholder="Kode Barang" required />
+<input type="text" id="nama" placeholder="Nama Barang" required />
+<input type="number" id="masuk" placeholder="Stok Masuk" value="0" />
+<input type="number" id="keluar" placeholder="Stok Keluar" value="0" />
+<input type="text" id="keterangan" placeholder="Keterangan" />
+<input type="date" id="tanggal" required />
+<button type="submit" class="add">Tambah / Update</button>
+</form>
+
+<!-- FITUR TAMBAHAN -->
+<div class="filter-section">
+<input type="text" id="search" class="search-box" placeholder="Cari nama atau kode barang..." />
+<br />
+<label>Dari: <input type="date" id="filterFrom"></label>
+<label>Sampai: <input type="date" id="filterTo"></label>
+<button onclick="applyFilter()">Terapkan Filter</button>
+<button onclick="resetFilter()">Reset Filter</button>
+</div>
+
+<button class="export" onclick="exportCSV()">Export ke CSV</button>
+<button class="reset" id="btnReset" onclick="resetData()">Hapus Semua Data</button>
+
+<table id="tabelBarang">
+<thead>
+<tr>
+<th>Kode Barang</th>
+<th>Nama Barang</th>
+<th>Stok Masuk</th>
+<th>Stok Keluar</th>
+<th>Sisa Stok</th>
+<th>Keterangan</th>
+<th>Tanggal</th>
+<th>Aksi</th>
+</tr>
+</thead>
+<tbody></tbody>
+</table>
+
+<div class="laporan">
+<h3>Laporan Bulanan</h3>
+<select id="bulanLaporan"></select>
+<button onclick="tampilkanLaporan()">Tampilkan Laporan</button>
+<div id="hasilLaporan"></div>
+</div>
+</div>
+
+<script>
+// ---------- DATA & LOGIN ----------
+let dataBarang = JSON.parse(localStorage.getItem("dataBarang")) || [];
+let isAdmin = localStorage.getItem("isAdmin") === "true";
+
+const form = document.getElementById("formBarang");
+const tbody = document.querySelector("#tabelBarang tbody");
+const search = document.getElementById("search");
+const bulanSelect = document.getElementById("bulanLaporan");
+const adminStatus = document.getElementById("adminStatus");
+const btnReset = document.getElementById("btnReset");
+
+const USERNAME = "admin";
+const PASSWORD = "12345";
+
+// ---------- LOGIN ----------
+function login() {
+  const user = document.getElementById("loginUser").value;
+  const pass = document.getElementById("loginPass").value;
+  if(user===USERNAME && pass===PASSWORD) {
+    localStorage.setItem("isAdmin","true");
+    isAdmin=true;
+    alert("Login berhasil!");
+    renderPage();
+  } else alert("Username atau password salah!");
+}
+
+function logout() {
+  localStorage.removeItem("isAdmin");
+  isAdmin=false;
+  renderPage();
+}
+
+// ---------- TAMPILAN ----------
+function renderPage() {
+  document.getElementById("loginSection").style.display = isAdmin ? "none":"block";
+  document.getElementById("appSection").style.display = "block";
+  adminStatus.innerHTML = isAdmin ? "Mode: Admin (boleh edit/hapus)" : "Mode: Viewer (lihat saja)";
+  
+  // Disable form & tombol jika bukan admin
+  form.querySelectorAll("input, button").forEach(el=>el.disabled=!isAdmin);
+  btnReset.disabled=!isAdmin;
+  
+  renderTabel();
+}
+
+// ---------- DROPDOWN BULAN ----------
+const bulanNama=["Januari","Februari","Maret","April","Mei","Juni","Juli","Agustus","September","Oktober","November","Desember"];
+bulanNama.forEach((b,i)=>{
+  const opt=document.createElement("option");
+  opt.value=i+1; opt.text=b;
+  bulanSelect.appendChild(opt);
+});
+
+// ---------- TABEL ----------
+function renderTabel(data=dataBarang){
+  tbody.innerHTML="";
+  data.forEach((item,index)=>{
+    const row=document.createElement("tr");
+    row.innerHTML=`
+      <td>${item.kode}</td>
+      <td>${item.nama}</td>
+      <td>${item.masuk}</td>
+      <td>${item.keluar}</td>
+      <td>${item.masuk - item.keluar}</td>
+      <td>${item.keterangan || ""}</td>
+      <td>${item.tanggal}</td>
+      <td>
+        <button class="edit" onclick="editItem(${index})" ${!isAdmin?'disabled':''}>Edit</button>
+        <button class="hapus" onclick="hapusItem(${index})" ${!isAdmin?'disabled':''}>Hapus</button>
+      </td>`;
+    tbody.appendChild(row);
+  });
+  localStorage.setItem("dataBarang",JSON.stringify(dataBarang));
+}
+
+// ---------- TAMBAH / UPDATE ----------
+form.addEventListener("submit", e=>{
+  e.preventDefault();
+  if(!isAdmin) return alert("Hanya admin yang bisa mengedit data!");
+  
+  const kode=document.getElementById("kode").value.trim();
+  const nama=document.getElementById("nama").value.trim();
+  const masuk=parseInt(document.getElementById("masuk").value) || 0;
+  const keluar=parseInt(document.getElementById("keluar").value) || 0;
+  const keterangan=document.getElementById("keterangan").value.trim();
+  const tanggal=document.getElementById("tanggal").value;
+  
+  let item=dataBarang.find(b=>b.kode===kode);
+  if(item){
+    item.masuk=masuk;
+    item.keluar=keluar;
+    item.keterangan=keterangan;
+    item.tanggal=tanggal;
+  } else dataBarang.push({kode,nama,masuk,keluar,keterangan,tanggal});
+  
+  renderTabel();
+  form.reset();
+});
+
+// ---------- EDIT ITEM ----------
+function editItem(index){
+  if(!isAdmin) return alert("Hanya admin bisa mengedit data!");
+  const item=dataBarang[index];
+  document.getElementById("kode").value=item.kode;
+  document.getElementById("nama").value=item.nama;
+  document.getElementById("masuk").value=item.masuk;
+  document.getElementById("keluar").value=item.keluar;
+  document.getElementById("keterangan").value=item.keterangan;
+  document.getElementById("tanggal").value=item.tanggal;
+}
+
+// ---------- HAPUS ITEM ----------
+function hapusItem(index){
+  if(!isAdmin) return alert("Hanya admin bisa menghapus data!");
+  if(confirm("Yakin ingin hapus item ini?")){
+    dataBarang.splice(index,1);
+    renderTabel();
+  }
+}
+
+// ---------- PENCARIAN ----------
+search.addEventListener("input",()=>{
+  const val=search.value.toLowerCase();
+  const filtered=dataBarang.filter(b=>b.nama.toLowerCase().includes(val)||b.kode.toLowerCase().includes(val));
+  renderTabel(filtered);
+});
+
+// ---------- FILTER TANGGAL ----------
+function applyFilter(){
+  const from=document.getElementById("filterFrom").value;
+  const to=document.getElementById("filterTo").value;
+  if(!from && !to) return renderTabel();
+  const filtered=dataBarang.filter(b=>{
+    const t=new Date(b.tanggal);
+    return (!from || t>=new Date(from)) && (!to || t<=new Date(to));
+  });
+  renderTabel(filtered);
+}
+
+function resetFilter(){
+  document.getElementById("filterFrom").value="";
+  document.getElementById("filterTo").value="";
+  renderTabel();
+}
+
+// ---------- EXPORT ----------
+function exportCSV(){
+  if(dataBarang.length===0) return alert("Tidak ada data untuk diexport!");
+  let csv="Kode Barang,Nama Barang,Stok Masuk,Stok Keluar,Sisa Stok,Keterangan,Tanggal\n";
+  dataBarang.forEach(item=>{
+    csv+=`${item.kode},${item.nama},${item.masuk},${item.keluar},${item.masuk - item.keluar},${item.keterangan},${item.tanggal}\n`;
+  });
+  const blob=new Blob([csv],{type:"text/csv;charset=utf-8;"});
+  const link=document.createElement("a");
+  link.href=URL.createObjectURL(blob);
+  link.download="data_stok.csv";
+  link.click();
+}
+
+// ---------- RESET SEMUA DATA ----------
+function resetData(){
+  if(!isAdmin) return alert("Hanya admin yang bisa menghapus data!");
+  if(confirm("Yakin ingin hapus semua data?")){
+    dataBarang=[];
+    renderTabel();
+  }
+}
+
+// ---------- LAPORAN BULANAN ----------
+function tampilkanLaporan(){
+  const bulan=parseInt(bulanSelect.value);
+  const hasil=document.getElementById("hasilLaporan");
+  const filtered=dataBarang.filter(b=>new Date(b.tanggal).getMonth()+1===bulan);
+  if(filtered.length===0){
+    hasil.innerHTML=`<p>Tidak ada data untuk bulan ${bulanNama[bulan-1]}.</p>`;
+    return;
+  }
+  let totalMasuk=0,totalKeluar=0;
+  filtered.forEach(b=>{
+    totalMasuk+=b.masuk; totalKeluar+=b.keluar;
+  });
+  hasil.innerHTML=`
+    <p><b>Bulan:</b> ${bulanNama[bulan-1]}</p>
+    <p><b>Total Stok Masuk:</b> ${totalMasuk}</p>
+    <p><b>Total Stok Keluar:</b> ${totalKeluar}</p>
+    <p><b>Sisa Stok Bersih:</b> ${totalMasuk - totalKeluar}</p>
+  `;
+}
+
+renderPage();
+</script>
+</body>
+</html>
